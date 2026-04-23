@@ -1,4 +1,4 @@
-# Proiect
+# BanKit
 
 Acest proiect implementează un sistem bancar orientat pe obiecte, cu separare clară între entitățile de domeniu și logica de business.
 
