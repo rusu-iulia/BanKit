@@ -80,7 +80,7 @@ Aplicație bancară completă implementată în Java, cu interfață în consol�
 
 ## Funcționalități
 
-### Meniu Admin (parolă: `admin2026`)
+### Meniu Admin
 
 1. **Adaugă client** — înregistrare persoană fizică (CNP) sau persoană juridică (CUI) cu parolă și abonament ales
 2. **Afișează clienți sortați** — lista tuturor clienților din baza de date, sortată alfabetic
