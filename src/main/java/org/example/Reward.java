@@ -57,10 +57,15 @@ public abstract class Reward {
         if (!(o instanceof Reward reward)) return false;
         return Objects.equals(idOferta, reward.idOferta);
     }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(idOferta);
+    }
     
     @Override
     public String toString() {
-        return "Oferta " + numeOferta + " costă " + costPuncte + " RevPoints și " + (rewardRevendicat ? " a fost revendicată." : " nu a fost revendicată.");
+        return "Oferta " + numeOferta + " costă " + costPuncte + " RevPoints";
     }
 }
 
@@ -79,6 +84,9 @@ class FlightReward extends Reward {
         this.companieAeriana = companieAeriana;
         this.destinatie = destinatie;
     }
+
+    public String getCompanieAeriana() { return companieAeriana; }
+    public String getDestinatie() { return destinatie; }
 
     @Override
     public String toString() {
@@ -101,6 +109,9 @@ class AccommodationReward extends Reward {
         this.hotel = hotel;
         this.numarNopti = numarNopti;
     }
+
+    public String getHotel() { return hotel; }
+    public int getNumarNopti() { return numarNopti; }
 
     @Override
     public String toString() {

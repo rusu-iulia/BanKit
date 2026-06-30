@@ -1,130 +1,109 @@
 package org.example;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
-public abstract class Client implements Comparable<Client>{
+import org.example.enums.TipAbonament;
+import org.example.exceptions.AuthenticationException;
+
+public abstract class Client implements Comparable<Client> {
+
+    abstract String getNumeComplet();
+    abstract String getIdentificatorUnic();
+
     private static int contorIdClient = 100;
     private int idClient;
     private String adresa;
-    private Account[] conturi;
+    private String parolaHash;
+    private List<Account> conturi = new ArrayList<>();
     private int puncteRev;
     private LocalDate dataInrolare;
     private TipAbonament abonament;
 
+    private static String hashParola(String parola) {
+        return Integer.toHexString(parola.hashCode());
+    }
 
-    public Client(String adresa, LocalDate dataInrolare, TipAbonament abonament) {
-        if (adresa == null || adresa.trim().isEmpty()) {
-            throw new IllegalArgumentException("Adresă invalidă.");
-        }
-        if (dataInrolare == null) {
-            throw new IllegalArgumentException("Data înrolării invalidă.");
-        }
-        if (abonament == null) {
-            throw new IllegalArgumentException("Abonament invalid.");
-        }
+    public Client(String adresa, LocalDate dataInrolare, TipAbonament abonament, String parola) {
+        if (adresa == null || adresa.trim().isEmpty()) throw new IllegalArgumentException("Adresă invalidă.");
+        if (dataInrolare == null) throw new IllegalArgumentException("Data înrolării invalidă.");
+        if (abonament == null) throw new IllegalArgumentException("Abonament invalid.");
         this.idClient = contorIdClient++;
         this.adresa = adresa;
-        this.conturi = new Account[10];
         this.puncteRev = 0;
         this.dataInrolare = dataInrolare;
         this.abonament = abonament;
+        if (parola != null && !parola.trim().isEmpty()) {
+            this.parolaHash = hashParola(parola);
+        }
     }
 
-    public int getIdClient() {
-        return idClient;
+    String getParolaHash() { return parolaHash; }
+    void setParolaHash(String hash) { this.parolaHash = hash; }
+    void setIdClient(int id) { this.idClient = id; }
+
+    public boolean verificaParola(String parola) {
+        if (parolaHash == null || parola == null) return false;
+        return parolaHash.equals(hashParola(parola));
     }
 
-    public String getAdresa() {
-        return adresa;
+    public void schimbaParola(String parolaVeche, String parolaNou) {
+        if (!verificaParola(parolaVeche)) throw new AuthenticationException();
+        if (parolaNou == null || parolaNou.trim().isEmpty()) {
+            throw new IllegalArgumentException("Parola nouă nu poate fi goală.");
+        }
+        this.parolaHash = hashParola(parolaNou);
     }
+
+    public int getIdClient() { return idClient; }
+
+    public String getAdresa() { return adresa; }
 
     public void setAdresa(String adresa) {
-        if (adresa == null || adresa.trim().isEmpty()) {
-            throw new IllegalArgumentException("Adresă invalidă.");
-        }
+        if (adresa == null || adresa.trim().isEmpty()) throw new IllegalArgumentException("Adresă invalidă.");
         this.adresa = adresa;
     }
 
-    public Account[] getConturi() {
-        return conturi.clone(); 
+    public List<Account> getConturi() {
+        return Collections.unmodifiableList(conturi);
     }
 
     public void adaugaCont(Account cont) {
         if (cont == null) return;
-        for (int i = 0; i < conturi.length; i++) {
-            if (conturi[i] == null) {
-                conturi[i] = cont;
-                return;
-            }
-        }
-        throw new IllegalStateException("Array-ul de conturi e plin (maxim 10 conturi).");
+        conturi.add(cont);
     }
 
-    public void stergeCont(Account cont) {
-        for (int i = 0; i < conturi.length; i++) {
-            if (conturi[i] != null && conturi[i].equals(cont)) {
-                conturi[i] = null;
-                return;
-            }
-        }
-    }
+    public int getNumarConturi() { return conturi.size(); }
 
-    public int getNumarConturi() {
-        int count = 0;
-        for (Account a : conturi) {
-            if (a != null) count++;
-        }
-        return count;
-    }
-
-    public int getPuncteRev() {
-        return puncteRev;
-    }
+    public int getPuncteRev() { return puncteRev; }
 
     public void setPuncteRev(int puncteRev) {
-        if (puncteRev < 0) {
-            throw new IllegalArgumentException("Puncte RevPoints invalide.");
-        }
+        if (puncteRev < 0) throw new IllegalArgumentException("Puncte RevPoints invalide.");
         this.puncteRev = puncteRev;
     }
 
     public void adaugaPuncte(int puncte) {
-        if (puncte > 0) {
-            this.puncteRev += puncte;
-        }
+        if (puncte > 0) this.puncteRev += puncte;
     }
 
-    public LocalDate getDataInrolare() {
-        return dataInrolare;
-    }
+    public LocalDate getDataInrolare() { return dataInrolare; }
 
     public void setDataInrolare(LocalDate dataInrolare) {
-        if (dataInrolare == null) {
-            throw new IllegalArgumentException("Data înrolării invalidă.");
-        }
+        if (dataInrolare == null) throw new IllegalArgumentException("Data înrolării invalidă.");
         this.dataInrolare = dataInrolare;
     }
 
-
-    public TipAbonament getAbonament() {
-        return abonament;
-    }
+    public TipAbonament getAbonament() { return abonament; }
 
     public void setAbonament(TipAbonament abonament) {
-        if (abonament == null) {
-            throw new IllegalArgumentException("Abonament invalid.");
-        }
+        if (abonament == null) throw new IllegalArgumentException("Abonament invalid.");
         this.abonament = abonament;
-    }
-
-    public boolean revendicaReward(Reward reward) {
-        if (reward.sePoateRevendica(this.puncteRev)) {
-            reward.revendica();
-            this.puncteRev -= reward.getCostPuncte();
-            return true;
-        }
-        return false;
     }
 
     @Override
@@ -133,6 +112,9 @@ public abstract class Client implements Comparable<Client>{
         if (!(o instanceof Client client)) return false;
         return idClient == client.idClient;
     }
+
+    @Override
+    public int hashCode() { return Integer.hashCode(idClient); }
 
     @Override
     public String toString() {
@@ -145,26 +127,22 @@ public abstract class Client implements Comparable<Client>{
 
     @Override
     public int compareTo(Client o) {
-        return this.toString().compareTo(o.toString());
+        return this.getNumeComplet().compareToIgnoreCase(o.getNumeComplet());
     }
 }
 
 class PersoanaFizica extends Client {
+
     private String nume;
     private String prenume;
     private String CNP;
 
-    public PersoanaFizica(String adresa, LocalDate dataInrolare, TipAbonament abonament, String nume, String prenume, String CNP) {
-        super(adresa, dataInrolare, abonament);
-        if (nume == null || nume.trim().isEmpty()) {
-            throw new IllegalArgumentException("Nume invalid.");
-        }
-        if (prenume == null || prenume.trim().isEmpty()) {
-            throw new IllegalArgumentException("Prenume invalid.");
-        }
-        if (!isValidCNP(CNP)) {
-            throw new IllegalArgumentException("CNP invalid.");
-        }
+    public PersoanaFizica(String adresa, LocalDate dataInrolare, TipAbonament abonament, String parola,
+                          String nume, String prenume, String CNP) {
+        super(adresa, dataInrolare, abonament, parola);
+        if (nume == null || nume.trim().isEmpty()) throw new IllegalArgumentException("Nume invalid.");
+        if (prenume == null || prenume.trim().isEmpty()) throw new IllegalArgumentException("Prenume invalid.");
+        if (!isValidCNP(CNP)) throw new IllegalArgumentException("CNP invalid.");
         if (abonament == TipAbonament.BUSINESS_PRO) {
             throw new IllegalArgumentException("Persoanele fizice nu pot avea abonament BUSINESS_PRO.");
         }
@@ -177,41 +155,30 @@ class PersoanaFizica extends Client {
         return CNP != null && CNP.matches("\\d{13}");
     }
 
-    public String getNume() {
-        return nume;
-    }
-
+    public String getNume() { return nume; }
 
     public void setNume(String nume) {
-        if (nume == null || nume.trim().isEmpty()) {
-            throw new IllegalArgumentException("Nume invalid.");
-        }
+        if (nume == null || nume.trim().isEmpty()) throw new IllegalArgumentException("Nume invalid.");
         this.nume = nume;
     }
 
-    public String getPrenume() {
-        return prenume;
-    }
+    public String getPrenume() { return prenume; }
 
     public void setPrenume(String prenume) {
-        if (prenume == null || prenume.trim().isEmpty()) {
-            throw new IllegalArgumentException("Prenume invalid.");
-        }
+        if (prenume == null || prenume.trim().isEmpty()) throw new IllegalArgumentException("Prenume invalid.");
         this.prenume = prenume;
     }
 
-    public String getNumeComplet(){
-        return nume + " " + prenume;
-    }
-    
-    public String getCNP() {
-        return "****" + CNP.substring(9);
-    }
+    @Override
+    String getNumeComplet() { return nume + " " + prenume; }
+
+    @Override
+    String getIdentificatorUnic() { return CNP; }
+
+    public String getCNP() { return "****" + CNP.substring(9); }
 
     public void setCNP(String CNP) {
-        if (!isValidCNP(CNP)) {
-            throw new IllegalArgumentException("CNP invalid.");
-        }
+        if (!isValidCNP(CNP)) throw new IllegalArgumentException("CNP invalid.");
         this.CNP = CNP;
     }
 
@@ -223,24 +190,27 @@ class PersoanaFizica extends Client {
     }
 
     @Override
+    public int hashCode() { return Objects.hash(super.hashCode(), CNP); }
+
+    @Override
     public String toString() {
         return nume + " " + prenume + " este un client al băncii și este persoană fizică cu CNP-ul " + getCNP() + ". " + super.toString();
     }
 }
 
 class PersoanaJuridica extends Client {
+
     private String denumireCompanie;
     private String CUI;
     private String reprezentantLegal;
 
-    public PersoanaJuridica(String adresa, LocalDate dataInrolare, TipAbonament abonament, String denumireCompanie, String CUI, String reprezentantLegal) {
-        super(adresa, dataInrolare, abonament);
+    public PersoanaJuridica(String adresa, LocalDate dataInrolare, TipAbonament abonament, String parola,
+                            String denumireCompanie, String CUI, String reprezentantLegal) {
+        super(adresa, dataInrolare, abonament, parola);
         if (denumireCompanie == null || denumireCompanie.trim().isEmpty()) {
             throw new IllegalArgumentException("Denumirea companiei invalidă.");
         }
-        if (!isValidCUI(CUI)) {
-            throw new IllegalArgumentException("CUI invalid.");
-        }
+        if (!isValidCUI(CUI)) throw new IllegalArgumentException("CUI invalid.");
         if (reprezentantLegal == null || reprezentantLegal.trim().isEmpty()) {
             throw new IllegalArgumentException("Reprezentantul legal invalid.");
         }
@@ -256,10 +226,6 @@ class PersoanaJuridica extends Client {
         return CUI != null && CUI.matches("\\d{6}");
     }
 
-    public String getDenumireCompanie() {
-        return denumireCompanie;
-    }
-
     public void setDenumireCompanie(String denumireCompanie) {
         if (denumireCompanie == null || denumireCompanie.trim().isEmpty()) {
             throw new IllegalArgumentException("Denumirea companiei invalidă.");
@@ -267,20 +233,20 @@ class PersoanaJuridica extends Client {
         this.denumireCompanie = denumireCompanie;
     }
 
-    public String getCUI() {
-        return "****" + CUI.substring(Math.max(0, CUI.length() - 4));
-    }
+    @Override
+    String getNumeComplet() { return denumireCompanie; }
+
+    @Override
+    String getIdentificatorUnic() { return CUI; }
+
+    public String getCUI() { return "****" + CUI.substring(Math.max(0, CUI.length() - 4)); }
 
     public void setCUI(String CUI) {
-        if (!isValidCUI(CUI)) {
-            throw new IllegalArgumentException("CUI invalid.");
-        }
+        if (!isValidCUI(CUI)) throw new IllegalArgumentException("CUI invalid.");
         this.CUI = CUI;
     }
 
-    public String getReprezentantLegal() {
-        return reprezentantLegal;
-    }
+    public String getReprezentantLegal() { return reprezentantLegal; }
 
     public void setReprezentantLegal(String reprezentantLegal) {
         if (reprezentantLegal == null || reprezentantLegal.trim().isEmpty()) {
@@ -297,7 +263,11 @@ class PersoanaJuridica extends Client {
     }
 
     @Override
+    public int hashCode() { return Objects.hash(super.hashCode(), CUI); }
+
+    @Override
     public String toString() {
-        return denumireCompanie + " este un client al băncii și este persoană juridică cu CUI-ul " + getCUI() + ", reprezentată legal de " + reprezentantLegal + ". " + super.toString();
+        return denumireCompanie + " este un client al băncii și este persoană juridică cu CUI-ul " + getCUI()
+                + ", reprezentată legal de " + reprezentantLegal + ". " + super.toString();
     }
 }

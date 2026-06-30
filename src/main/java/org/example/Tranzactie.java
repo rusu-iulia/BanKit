@@ -1,11 +1,17 @@
 package org.example;
 
+import org.example.enums.StatusTranzactie;
+import org.example.enums.TipTranzactie;
+
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 public class Tranzactie {
     private static int contorIdTranzactie = 100;
+
+    static void setContorIdTranzactie(int valoare) {
+        contorIdTranzactie = valoare;
+    }
     private int idTranzactie;
     private LocalDateTime dataTranzactie;
     private LocalDateTime dataModificare;
@@ -54,6 +60,10 @@ public class Tranzactie {
         return idTranzactie;
     }
 
+    void setIdTranzactie(int idTranzactie) {
+        this.idTranzactie = idTranzactie;
+    }
+    
     public LocalDateTime getDataTranzactie() {
         return dataTranzactie;
     }
@@ -86,6 +96,8 @@ public class Tranzactie {
         return status;
     }
 
+    void setStatus(StatusTranzactie status) { this.status = status; }
+
     public void marcheazaCompletata() {
         if (status == StatusTranzactie.ANULATA) {
             throw new IllegalStateException("Nu se poate marca o tranzacție anulată ca completată.");
@@ -101,7 +113,6 @@ public class Tranzactie {
         this.status = StatusTranzactie.ANULATA;
         this.dataModificare = LocalDateTime.now();
     }
-
 
     public boolean isCompletata() {
         return status == StatusTranzactie.COMPLETATA;
@@ -119,7 +130,12 @@ public class Tranzactie {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Tranzactie that)) return false;
-        return Objects.equals(idTranzactie, that.idTranzactie);
+        return idTranzactie == that.idTranzactie;
+    }
+
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(idTranzactie);
     }
 
 

@@ -1,4 +1,4 @@
-package org.example;
+package org.example.enums;
 
 public enum TipAbonament {
     STANDARD(1.0, 0.01),

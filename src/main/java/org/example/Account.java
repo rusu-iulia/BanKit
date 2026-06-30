@@ -1,14 +1,17 @@
 package org.example;
 
+import org.example.enums.ValuteAcceptate;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public abstract class Account {
     private String iban;
     private double sold;
     private ValuteAcceptate valuta;
-    private Client titular; // agregare: daca un client isi reziliaza contul, clientul poate exista in continuare in sistem, dar fara acel cont
-    private Card[] carduri = new Card[5]; // compozitie: un card nu poate exista fara un cont. cand se sterge contul, dispare si cardul
-    private int numarCarduri = 0;
+    private Client titular;
+    private List<Card> carduri = new ArrayList<>(); // compozitie: un card nu poate exista fara un cont. cand se sterge contul, dispare si cardul
 
     public Account(String iban){
         if (!isValidIban(iban)) {
@@ -33,19 +36,17 @@ public abstract class Account {
     private static boolean isValidIban(String iban) {
         return iban != null && iban.length() == 24 && iban.startsWith("RO") && iban.substring(2).matches("[A-Z0-9]+");
     }
+
     public String getIban() {
         return iban;
     }
 
-    private void setIban(String iban) {
-        if (!isValidIban(iban)) {
-            throw new IllegalArgumentException("IBAN invalid.");
-        }
-        this.iban = iban;
-    }
-
     public double getSold(){
         return sold;
+    }
+
+    public void setSold(double sold) {
+        this.sold = sold;
     }
 
     public Client getTitular() {
@@ -57,17 +58,13 @@ public abstract class Account {
     }
 
     public void adaugaCard(Card card) {
-        if (numarCarduri < carduri.length) {
-            carduri[numarCarduri] = card;
-            numarCarduri++;
-        } else {
-            throw new IllegalStateException("S-a atins numărul maxim de carduri pentru acest cont.");
-        }
+        carduri.add(card);
     }
 
-    public Card[] getCarduri() {
+    public List<Card> getCarduri() {
         return carduri;
     }
+
     public void depunere(double suma) {
         if (suma <= 0) {
             throw new IllegalArgumentException("Suma depusă trebuie să fie pozitivă.");
@@ -98,6 +95,11 @@ public abstract class Account {
     public boolean equals(Object o) {
         if (!(o instanceof Account account)) return false;
         return Objects.equals(iban, account.iban);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(iban);
     }
 
     @Override
@@ -158,9 +160,10 @@ class ContDeEconomii extends Account {
         this.rataDobanda = rataDobanda;
     }
 
-    public void adaugaDobanda() {
+    public double adaugaDobanda() {
         double dobanda = getSold() * rataDobanda;
         depunere(dobanda);
+        return dobanda;
     }
 
     @Override
