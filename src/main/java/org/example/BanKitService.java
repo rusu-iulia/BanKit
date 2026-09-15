@@ -13,7 +13,9 @@ import org.example.enums.TipAbonament;
 import org.example.enums.TipTranzactie;
 import org.example.enums.ValuteAcceptate;
 import org.example.exceptions.*;
+import org.springframework.stereotype.Service;
 
+@Service
 public class BanKitService {
 
     private final Connection conn;
@@ -923,5 +925,266 @@ public class BanKitService {
         catalogRewards.add(new AccommodationReward("A4", "Hotel Mamaia", 5000, "Vega Hotel", 5));
         catalogRewards.add(new AccommodationReward("A5", "Resort Maldive", 600000, "Sun Island Resort", 10));
         catalogRewards.add(new AccommodationReward("A6", "Pensiune Brasov", 700, "Pensiunea Codrilor", 2));
+    }
+
+    public void atualizaClientAPI(int idClient, String adresa, String abonament) {
+        try {
+            TipAbonament tip = TipAbonament.valueOf(abonament.toUpperCase());
+            PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE clienti SET adresa=?, abonament=? WHERE id_client=?");
+            ps.setString(1, adresa);
+            ps.setString(2, tip.name());
+            ps.setInt(3, idClient);
+            int rows = ps.executeUpdate();
+            if (rows == 0) throw new ClientNotFoundException(idClient);
+            CsvAuditService.getInstance().logAction("UPDATE_CLIENT");
+        } catch (ClientNotFoundException e) {
+            throw e;
+        } catch (IllegalArgumentException e) {
+            throw new BanKitException("Tip abonament invalid: " + abonament);
+        } catch (SQLException e) {
+            throw new RuntimeException("Eroare la actualizarea clientului: " + e.getMessage(), e);
+        }
+    }
+
+    public void stergeClientAPI(int idClient) {
+        try {
+            if (cautaClientDupaIdFaraConturi(idClient) == null) throw new ClientNotFoundException(idClient);
+
+            PreparedStatement psIbans = conn.prepareStatement("SELECT iban FROM conturi WHERE id_titular=?");
+            psIbans.setInt(1, idClient);
+            ResultSet rs = psIbans.executeQuery();
+            List<String> ibans = new ArrayList<>();
+            while (rs.next()) ibans.add(rs.getString("iban"));
+            rs.close();
+
+            for (String iban : ibans) {
+                PreparedStatement psTx = conn.prepareStatement(
+                        "DELETE FROM tranzactii WHERE iban_sursa=? OR iban_destinatie=?");
+                psTx.setString(1, iban);
+                psTx.setString(2, iban);
+                psTx.executeUpdate();
+            }
+
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM clienti WHERE id_client=?");
+            ps.setInt(1, idClient);
+            ps.executeUpdate();
+            CsvAuditService.getInstance().logAction("STERGE_CLIENT");
+        } catch (ClientNotFoundException e) {
+            throw e;
+        } catch (SQLException e) {
+            throw new RuntimeException("Eroare la ștergerea clientului: " + e.getMessage(), e);
+        }
+    }
+
+    public void inchideContAPI(String iban) {
+        try {
+            if (cautaContDupaIban(iban) == null) throw new ContNotFoundException(iban);
+
+            PreparedStatement psTx = conn.prepareStatement(
+                    "DELETE FROM tranzactii WHERE iban_sursa=? OR iban_destinatie=?");
+            psTx.setString(1, iban);
+            psTx.setString(2, iban);
+            psTx.executeUpdate();
+
+            PreparedStatement ps = conn.prepareStatement("DELETE FROM conturi WHERE iban=?");
+            ps.setString(1, iban);
+            ps.executeUpdate();
+            CsvAuditService.getInstance().logAction("INCHIDE_CONT");
+        } catch (ContNotFoundException e) {
+            throw e;
+        } catch (SQLException e) {
+            throw new RuntimeException("Eroare la închiderea contului: " + e.getMessage(), e);
+        }
+    }
+
+    // ===== API LAYER METHODS =====
+
+    public Client autentificaDupaCod(String cod, String parola) {
+        Client gasit = cautaClientDupaCNP(cod);
+        if (gasit == null) throw new ClientNotFoundException(-1);
+        return autentifica(gasit.getIdClient(), parola);
+    }
+
+    public int adaugaPersoanaFizicaAPI(String adresa, String parola, String abonament,
+            String nume, String prenume, String cnp) {
+        PersoanaFizica pf = new PersoanaFizica(adresa, java.time.LocalDate.now(),
+                org.example.enums.TipAbonament.valueOf(abonament.toUpperCase()), parola, nume, prenume, cnp);
+        adaugaClient(pf);
+        return pf.getIdClient();
+    }
+
+    public int adaugaPersoanaJuridicaAPI(String adresa, String parola, String abonament,
+            String denumire, String cui, String reprezentant) {
+        PersoanaJuridica pj = new PersoanaJuridica(adresa, java.time.LocalDate.now(),
+                org.example.enums.TipAbonament.valueOf(abonament.toUpperCase()), parola, denumire, cui, reprezentant);
+        adaugaClient(pj);
+        return pj.getIdClient();
+    }
+
+    public String deschideContCurentAPI(int idClient, String valuta, double sold, double taxa) {
+        Client client = cautaClientDupaIdCuConturi(idClient);
+        if (client == null) throw new ClientNotFoundException(idClient);
+        String iban = genereazaIban();
+        ContCurent cont = new ContCurent(iban, sold, org.example.enums.ValuteAcceptate.valueOf(valuta.toUpperCase()), taxa);
+        deschideCont(client, cont);
+        return iban;
+    }
+
+    public String deschideContEconomiiAPI(int idClient, String valuta, double sold, double dobanda) {
+        Client client = cautaClientDupaIdCuConturi(idClient);
+        if (client == null) throw new ClientNotFoundException(idClient);
+        String iban = genereazaIban();
+        ContDeEconomii cont = new ContDeEconomii(iban, sold, org.example.enums.ValuteAcceptate.valueOf(valuta.toUpperCase()), dobanda);
+        deschideCont(client, cont);
+        return iban;
+    }
+
+    public String emiteCardDebitAPI(String iban, String pin, double limitaContactless) {
+        String numarCard = "4000" + String.format("%012d", (long)(Math.random() * 1000000000000L));
+        CardDebit card = new CardDebit(numarCard, pin, limitaContactless);
+        emiteCardPentruCont(iban, card);
+        return numarCard;
+    }
+
+    public String emiteCardCreditAPI(String iban, String pin, double limitaCredit) {
+        String numarCard = "5100" + String.format("%012d", (long)(Math.random() * 1000000000000L));
+        CardCredit card = new CardCredit(numarCard, pin, limitaCredit);
+        emiteCardPentruCont(iban, card);
+        return numarCard;
+    }
+
+    // ===== DTO CONVERSION METHODS =====
+
+    public org.example.dto.ClientDTO toClientDTO(Client client) {
+        List<org.example.dto.AccountDTO> conturiDTO = client.getConturi().stream()
+                .map(this::toAccountDTO)
+                .toList();
+        String tip = (client instanceof PersoanaFizica) ? "PERSOANA_FIZICA" : "PERSOANA_JURIDICA";
+        return new org.example.dto.ClientDTO(
+                client.getIdClient(),
+                client.getNumeComplet(),
+                tip,
+                client.getAdresa(),
+                client.getPuncteRev(),
+                client.getAbonament().name(),
+                client.getDataInrolare().toString(),
+                conturiDTO
+        );
+    }
+
+    public org.example.dto.AccountDTO toAccountDTO(Account cont) {
+        List<org.example.dto.CardDTO> carduriDTO = cont.getCarduri().stream()
+                .map(c -> toCardDTO(c, cont.getIban()))
+                .toList();
+        double taxa = (cont instanceof ContCurent cc) ? cc.getTaxaAdministrare() : 0;
+        double dobanda = (cont instanceof ContDeEconomii ce) ? ce.getRataDobanda() : 0;
+        String tip = (cont instanceof ContCurent) ? "CONT_CURENT" : "CONT_ECONOMII";
+        return new org.example.dto.AccountDTO(
+                cont.getIban(), tip, cont.getSold(), cont.getValuta(), taxa, dobanda, carduriDTO
+        );
+    }
+
+    public org.example.dto.CardDTO toCardDTO(Card card, String ibanCont) {
+        String mascat = "**** **** **** " + card.getNumarCard().substring(12);
+        String tip = (card instanceof CardDebit) ? "CARD_DEBIT" : "CARD_CREDIT";
+        double limitaContactless = (card instanceof CardDebit cd) ? cd.getLimitaContactless() : 0;
+        double limitaCredit = (card instanceof CardCredit cc) ? cc.getLimitaCredit() : 0;
+        double datorie = (card instanceof CardCredit cc) ? cc.getDatorieCurenta() : 0;
+        return new org.example.dto.CardDTO(
+                card.getNumarCard(), mascat, tip, card.isBlocat(),
+                card.getLimitaZilnica(), limitaContactless, limitaCredit, datorie, ibanCont
+        );
+    }
+
+    public org.example.dto.ClientDTO getClientDTO(int idClient) {
+        Client client = cautaClientDupaIdCuConturi(idClient);
+        if (client == null) throw new ClientNotFoundException(idClient);
+        return toClientDTO(client);
+    }
+
+    public List<org.example.dto.ClientDTO> getToateClientiiDTO() {
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT * FROM clienti");
+            ResultSet rs = ps.executeQuery();
+            List<Client> toti = new ArrayList<>();
+            while (rs.next()) {
+                Client client = clientDinBD(rs);
+                PreparedStatement ps2 = conn.prepareStatement("SELECT * FROM conturi WHERE id_titular=?");
+                ps2.setInt(1, client.getIdClient());
+                ResultSet rs2 = ps2.executeQuery();
+                while (rs2.next()) {
+                    Account cont = contDinBD(rs2);
+                    cont.setTitular(client);
+                    incarcaCarduriPentruCont(cont);
+                    client.adaugaCont(cont);
+                }
+                rs2.close();
+                toti.add(client);
+            }
+            rs.close();
+            return toti.stream().map(this::toClientDTO).toList();
+        } catch (SQLException e) {
+            throw new RuntimeException("Eroare la obținerea clienților: " + e.getMessage(), e);
+        }
+    }
+
+    public List<org.example.dto.TransactionDTO> getExtrasDeContDTO(String iban, String start, String end) {
+        Account cont = cautaContDupaIban(iban);
+        if (cont == null) throw new ContNotFoundException(iban);
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("MM/yyyy");
+        try {
+            java.time.YearMonth startYM = java.time.YearMonth.parse(start, formatter);
+            java.time.YearMonth endYM = java.time.YearMonth.parse(end, formatter);
+            Timestamp tsStart = Timestamp.valueOf(startYM.atDay(1).atStartOfDay());
+            Timestamp tsEnd = Timestamp.valueOf(endYM.plusMonths(1).atDay(1).atStartOfDay());
+            String sql = """
+                SELECT t.id_tranzactie, t.data_tranzactie, t.suma, t.tip,
+                       t.iban_sursa, t.iban_destinatie, t.detalii, t.status_t, c.valuta
+                FROM tranzactii t JOIN conturi c ON t.iban_sursa = c.iban
+                WHERE (t.iban_sursa=? OR t.iban_destinatie=?)
+                  AND t.data_tranzactie >= ? AND t.data_tranzactie < ?
+                ORDER BY t.data_tranzactie DESC
+                """;
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ps.setString(1, iban); ps.setString(2, iban);
+            ps.setTimestamp(3, tsStart); ps.setTimestamp(4, tsEnd);
+            ResultSet rs = ps.executeQuery();
+            List<org.example.dto.TransactionDTO> list = new ArrayList<>();
+            java.time.format.DateTimeFormatter dtFmt = java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+            while (rs.next()) {
+                list.add(new org.example.dto.TransactionDTO(
+                    rs.getInt("id_tranzactie"),
+                    rs.getTimestamp("data_tranzactie").toLocalDateTime().format(dtFmt),
+                    rs.getDouble("suma"),
+                    rs.getString("tip"),
+                    rs.getString("iban_sursa"),
+                    rs.getString("iban_destinatie"),
+                    rs.getString("detalii"),
+                    rs.getString("status_t"),
+                    rs.getString("valuta")
+                ));
+            }
+            rs.close();
+            return list;
+        } catch (Exception e) {
+            throw new RuntimeException("Eroare la extras de cont: " + e.getMessage(), e);
+        }
+    }
+
+    public List<org.example.dto.RewardDTO> getRewardsDTO(int idClient) {
+        List<String> revendicate = getRewardsRevendicate(idClient);
+        return catalogRewards.stream().map(r -> {
+            String tip, info1, info2;
+            if (r instanceof FlightReward fr) {
+                tip = "ZBOR"; info1 = fr.getCompanieAeriana(); info2 = fr.getDestinatie();
+            } else if (r instanceof AccommodationReward ar) {
+                tip = "CAZARE"; info1 = ar.getHotel(); info2 = String.valueOf(ar.getNumarNopti());
+            } else {
+                tip = "ALTUL"; info1 = ""; info2 = "";
+            }
+            return new org.example.dto.RewardDTO(r.getIdOferta(), r.getNumeOferta(), r.getCostPuncte(),
+                    tip, info1, info2, revendicate.contains(r.getIdOferta()));
+        }).toList();
     }
 }
